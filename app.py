@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 import uvicorn
 from sqlalchemy import *
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import relationship
+from models.schemas import UserBase, UserUpdate
 
 # Models
 
@@ -39,13 +40,39 @@ async def index():
     return {"message": users}
 
 @app.post('/user')
-async def create_user(request: Request, response: Response):
-    # Create User
-    data = await request.json()
-    if "username" not in data:
-        response.status_code = 400
-        return {"message": "username is required"}
-    return {"message": "User created"}
+async def create_user(response: Response, user: UserBase):
+    # Insert user to database
+    new_user = User(username=user.username, password=user.password, photo=user.photo)
+    session.add(new_user)
+    session.commit()
+    session.refresh(new_user)
+
+    return {"message": "User created", "user": new_user}
+
+
+@app.put('/user')
+async def update_user(user: UserUpdate):
+    # update user with user.id
+    user_id = user.id
+    user_to_update = session.query(User).filter_by(id=user_id).first()
+    user_to_update.password = user.password
+    user_to_update.photo = user.photo
+    session.commit()
+    session.refresh(user_to_update)
+    return {"message": "User updated", "user": user_to_update}
+
+@app.delete('/user')
+async def delete_user(user_id: int):
+    # Check if that user is having any hobby
+    user_to_delete = session.query(User).filter_by(id=user_id).first()
+    if user_to_delete.hobbies:
+        raise HTTPException(status_code=400, detail="User has hobbies")
+    
+    # Delete user
+    session.delete(user_to_delete)
+    session.commit()
+    return {'message':"User Deleted"}
+
 
 if __name__ == '__main__':
     Base.metadata.create_all(engine)
